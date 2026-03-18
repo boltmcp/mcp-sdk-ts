@@ -38,7 +38,39 @@ The script is guarded: it only rewrites when `package.json` `name` is already `@
 
 This fast-forwards `main` to `upstream/main`, then rebases `custom` onto it. If there are conflicts, resolve them and run `git rebase --continue`.
 
+## PR Workflow
+
+1. Create a feature branch off `custom`
+2. Open a PR targeting `custom`
+3. Fork CI runs build-and-test + validate-publish (dry-run); Claude Code Review runs automatically
+4. Merge to `custom`
+
 ## Publishing
+
+### Tag-based release (recommended)
+
+Tag the commit and push — CI handles the rest:
+
+```sh
+git tag fork-v2.0.0
+git push origin fork-v2.0.0
+```
+
+The npm dist-tag is auto-detected from the version:
+
+| Version pattern             | npm dist-tag |
+|-----------------------------|-------------|
+| `2.0.0` (stable)           | `latest`    |
+| `2.0.0-beta.1` (`-beta*`)  | `beta`      |
+| `2.0.0-rc.1` (other pre)   | `next`      |
+
+CI will: build + test (Node 20/22/24) → validate-publish (dry-run) → publish (waits for environment approval if configured).
+
+### Manual release (workflow_dispatch)
+
+Use the "Run workflow" button in GitHub Actions with `publish: true` and optional `version`/`tag` inputs.
+
+### Local publish
 
 Dry run first:
 ```sh
@@ -54,6 +86,40 @@ With a dist-tag:
 ```sh
 ./scripts/publish-fork.sh --version 2.0.0-beta.1 --tag beta
 ```
+
+## Versioning Strategy
+
+- Stable releases mirror upstream versions (e.g., `2.0.0` when upstream is `2.0.0`)
+- Fork-specific patches use `X.Y.Z-boltmcp.N` (e.g., `2.0.0-boltmcp.1`)
+
+## Workflows
+
+| Workflow | Active on fork? | Notes |
+|----------|----------------|-------|
+| `fork-ci.yml` | Yes | Build, test, publish for `custom` branch and `fork-v*` tags |
+| `claude-code-review.yml` | Yes | Runs on PRs to `custom` |
+| `main.yml` | No | Upstream CI, only triggers on `main` |
+| `release.yml` | No | Upstream release process |
+| `deploy-docs.yml` | No | Upstream docs deployment |
+| `conformance.yml` | No | Upstream conformance tests |
+| `update-spec-types.yml` | No | Upstream spec type generation |
+| `claude.yml` | No | Upstream Claude bot |
+| `publish.yml` | No | Upstream publish |
+
+Preview packages are automatically built by [pkg-pr-new](https://github.com/nicolo-ribaudo/pkg-pr-new) on PRs.
+
+## GitHub Setup
+
+### Required secrets
+
+- **`NPM_TOKEN`** — npm publish token with write access to `@boltmcp` scope
+- **`ANTHROPIC_API_KEY`** — for Claude Code Review on PRs
+
+### Release environment (recommended)
+
+1. Go to Settings → Environments → New environment → name it `release`
+2. Add required reviewers for a manual approval gate before publishing
+3. Optionally restrict deployment branches to `custom` branch and `fork-v*` tags
 
 ## Consumer Usage
 
