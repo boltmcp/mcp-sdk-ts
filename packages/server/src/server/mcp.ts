@@ -55,7 +55,7 @@ import { Server } from './server.js';
 /** Discriminated union stored internally to branch validation/listing logic. */
 export type ToolSchemaUnion = { kind: 'zod'; schema: AnySchema } | { kind: 'json'; schema: JsonSchemaType };
 
-export function toToolSchemaUnion(schema: AnySchema | JsonSchemaType): ToolSchemaUnion {
+function toToolSchemaUnion(schema: AnySchema | JsonSchemaType): ToolSchemaUnion {
     if ('_zod' in (schema as Record<string, unknown>)) {
         return { kind: 'zod', schema: schema as AnySchema };
     }

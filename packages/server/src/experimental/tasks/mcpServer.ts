@@ -8,7 +8,13 @@
 import type { AnySchema, JsonSchemaType, TaskToolExecution, ToolAnnotations, ToolExecution } from '@modelcontextprotocol/core';
 
 import type { AnyToolHandler, McpServer, RegisteredTool, ToolSchemaUnion } from '../../server/mcp.js';
-import { toToolSchemaUnion } from '../../server/mcp.js';
+
+function toToolSchemaUnion(schema: AnySchema | JsonSchemaType): ToolSchemaUnion {
+    if ('_zod' in (schema as Record<string, unknown>)) {
+        return { kind: 'zod', schema: schema as AnySchema };
+    }
+    return { kind: 'json', schema: schema as JsonSchemaType };
+}
 import type { JsonSchemaToolTaskHandler, ToolTaskHandler } from './interfaces.js';
 
 /**
