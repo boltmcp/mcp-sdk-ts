@@ -3,35 +3,15 @@ name: open-pr
 description: 'Commit changes to a new branch off custom and open a PR against origin/custom'
 ---
 
-1. Ensure the working tree has changes to commit (staged or unstaged). If there are no changes, tell the user and stop.
+1. If there are no uncommitted changes, tell the user and stop.
 
-2. Use a descriptive branch name (e.g., `fix-auth-timeout`, `add-tag-releases`).
-
-3. Ensure you're starting from an up-to-date `custom` branch:
+2. Create a branch from the latest `origin/custom`:
     - `git fetch origin custom`
-    - If currently on a feature branch with uncommitted changes, stash them first.
-    - Create the new branch from `origin/custom`: `git checkout -b <branch-name> origin/custom`
-    - If you stashed, pop the stash.
+    - `git checkout -b <descriptive-branch-name> origin/custom`
 
-4. Stage and commit the changes:
-    - Stage relevant files by name (avoid `git add -A` or `git add .`).
-    - Write a clear commit message following the repo's conventional style (see recent `git log --oneline`).
-
-5. Push the branch to origin:
+3. Stage relevant files by name, commit with a clear message, and push:
     - `git push -u origin <branch-name>`
 
-6. Open a PR against `custom` using the GitHub CLI:
+4. Open a PR: `gh pr create --repo boltmcp/mcp-sdk-ts --base custom --title "<title>" --body "<summary>"`
 
-    ```
-    gh pr create --repo boltmcp/mcp-sdk-ts --base custom --title "<title>" --body "$(cat <<'EOF'
-    ## Summary
-    <1-3 bullet points>
-
-    ## Test plan
-    <bulleted checklist>
-
-    EOF
-    )"
-    ```
-
-7. Return the PR URL to the user.
+5. Return the PR URL.
