@@ -5,7 +5,7 @@ description: 'Commit changes to a new branch off custom and open a PR against or
 
 1. Ensure the working tree has changes to commit (staged or unstaged). If there are no changes, tell the user and stop.
 
-2. Ask the user for a branch name if they haven't provided one. The branch should be descriptive (e.g., `fix-auth-timeout`, `add-tag-releases`).
+2. Use a descriptive branch name (e.g., `fix-auth-timeout`, `add-tag-releases`).
 
 3. Ensure you're starting from an up-to-date `custom` branch:
     - `git fetch origin custom`
