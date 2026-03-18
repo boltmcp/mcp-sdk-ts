@@ -185,5 +185,3 @@ jobs:
                     ARGS="$ARGS --tag ${{ needs.resolve-inputs.outputs.tag }}"
                   fi
                   ./scripts/publish-fork.sh $ARGS
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -69,7 +69,7 @@ Use the "Run workflow" button in GitHub Actions on the `custom` branch with `pub
 ## Versioning Strategy
 
 - **Stable releases** mirror upstream versions (e.g., `2.0.0` when upstream is `2.0.0`)
-- **Fork-specific patches** use `X.Y.Z-boltmcp.N` (e.g., `2.0.0-boltmcp.1`) — these get the `next` dist-tag automatically
+- **Fork-specific patches** use `X.Y.Z-boltmcp.N` (e.g., `2.0.0-boltmcp.1`) — these get the `next` dist-tag automatically. Consumers must install with `@next` or a specific version (e.g., `@boltmcp/mcp-sdk-server@next` or `@boltmcp/mcp-sdk-server@2.0.0-boltmcp.1`), since prerelease versions are not resolved by `@latest`.
 
 ## Syncing with Upstream
 
