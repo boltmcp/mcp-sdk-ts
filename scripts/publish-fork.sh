@@ -94,7 +94,10 @@ REWRITE_SCRIPT
 
 # --- Publish or dry-run ---
 
-PUBLISH_ARGS=(--access public --provenance)
+PUBLISH_ARGS=(--access public)
+if [[ -n "${CI:-}" ]]; then
+  PUBLISH_ARGS+=(--provenance)
+fi
 if [[ -n "$NPM_TAG" ]]; then
   PUBLISH_ARGS+=(--tag "$NPM_TAG")
 fi
