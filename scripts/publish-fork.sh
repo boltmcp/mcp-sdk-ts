@@ -75,30 +75,15 @@ cp "$PKG_JSON" "$PKG_JSON_BAK"
 
 echo "==> Rewriting package.json name to @boltmcp/mcp-sdk-server..."
 
-# Use node for reliable JSON manipulation
-node -e "
+# Use node for reliable JSON manipulation (heredoc avoids bash escaping issues)
+node - "$PKG_JSON" "$VERSION" <<'REWRITE_SCRIPT'
 const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('$PKG_JSON', 'utf8'));
+const [, , pkgPath, version] = process.argv;
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 pkg.name = '@boltmcp/mcp-sdk-server';
-$(if [[ -n "$VERSION" ]]; then echo "pkg.version = '$VERSION';"; fi)
-// Rewrite _shims export key references if they use the old package name
-const exports = pkg.exports || {};
-if (exports['./_shims']) {
-  // _shims entries are fine — they use relative paths, not package names
-}
-fs.writeFileSync('$PKG_JSON', JSON.stringify(pkg, null, 4) + '\n');
-"
-
-# --- Rewrite self-referencing imports in built output ---
-
-echo "==> Rewriting self-referencing imports in dist/*.mjs..."
-
-find "$SERVER_DIR/dist" -name '*.mjs' -exec \
-  sed -i'' -e 's|@modelcontextprotocol/server/_shims|@boltmcp/mcp-sdk-server/_shims|g' {} +
-
-# Also rewrite in .d.mts files for type resolution
-find "$SERVER_DIR/dist" -name '*.d.mts' -exec \
-  sed -i'' -e 's|@modelcontextprotocol/server/_shims|@boltmcp/mcp-sdk-server/_shims|g' {} +
+if (version) pkg.version = version;
+fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 4) + '\n');
+REWRITE_SCRIPT
 
 # --- Publish or dry-run ---
 

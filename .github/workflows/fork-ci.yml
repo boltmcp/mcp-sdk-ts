@@ -86,6 +86,23 @@ jobs:
                   fi
                   echo "OK: package.json name is '$NAME'"
 
+            - name: Verify prepack includes rewrite script
+              run: |
+                  PREPACK=$(node -p "require('./packages/server/package.json').scripts.prepack")
+                  if [[ "$PREPACK" != *"rewrite-fork-imports.cjs"* ]]; then
+                    echo "ERROR: prepack does not include rewrite-fork-imports.cjs (got '$PREPACK')"
+                    exit 1
+                  fi
+                  echo "OK: prepack is '$PREPACK'"
+
+            - name: Verify no stale @modelcontextprotocol/server refs in dist
+              run: |
+                  if grep -r '@modelcontextprotocol/server' packages/server/dist/; then
+                    echo "ERROR: found @modelcontextprotocol/server references in dist/"
+                    exit 1
+                  fi
+                  echo "OK: no stale references in dist/"
+
     publish:
         runs-on: ubuntu-latest
         if: github.event.inputs.publish == 'true'
