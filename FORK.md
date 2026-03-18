@@ -12,7 +12,7 @@ npm install @boltmcp/mcp-sdk-server
 import { McpServer } from '@boltmcp/mcp-sdk-server';
 ```
 
-The API is identical to `@modelcontextprotocol/server` — it's a drop-in replacement.
+The API is identical to `@modelcontextprotocol/server` — it's a drop-in replacement. See the upstream docs for full API reference.
 
 ## Branch Strategy
 
