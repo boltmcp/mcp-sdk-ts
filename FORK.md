@@ -104,9 +104,7 @@ With a dist-tag:
 | `conformance.yml` | No | Upstream conformance tests |
 | `update-spec-types.yml` | No | Upstream spec type generation |
 | `claude.yml` | No | Upstream Claude bot |
-| `publish.yml` | No | Upstream publish |
-
-Preview packages are automatically built by [pkg-pr-new](https://github.com/nicolo-ribaudo/pkg-pr-new) on PRs.
+| `publish.yml` | No | Upstream pkg-pr-new previews (repo guard skips on fork) |
 
 ## GitHub Setup
 
