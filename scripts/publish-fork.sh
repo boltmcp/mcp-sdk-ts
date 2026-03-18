@@ -13,6 +13,7 @@ PKG_JSON_BAK="$SERVER_DIR/package.json.bak"
 DRY_RUN=false
 NPM_TAG=""
 VERSION=""
+YES=false
 
 usage() {
   cat <<EOF
@@ -24,6 +25,7 @@ Options:
   --dry-run           Run npm pack --dry-run instead of npm publish
   --tag <tag>         npm dist-tag (e.g., beta, next)
   --version <ver>     Override version in package.json
+  --yes, -y           Skip interactive prompts (for CI)
   -h, --help          Show this help
 EOF
   exit 0
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)  DRY_RUN=true; shift ;;
     --tag)      NPM_TAG="$2"; shift 2 ;;
     --version)  VERSION="$2"; shift 2 ;;
+    --yes|-y)   YES=true; shift ;;
     -h|--help)  usage ;;
     *)          echo "Unknown option: $1"; usage ;;
   esac
@@ -49,8 +52,12 @@ fi
 BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 if [[ "$BRANCH" != "custom" ]]; then
   echo "WARNING: Not on 'custom' branch (currently on '$BRANCH')."
-  read -rp "Continue anyway? [y/N] " confirm
-  [[ "$confirm" =~ ^[Yy]$ ]] || exit 1
+  if $YES || [[ ! -t 0 ]]; then
+    echo "Continuing (non-interactive mode)."
+  else
+    read -rp "Continue anyway? [y/N] " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || exit 1
+  fi
 fi
 
 # --- Build (using original package names so monorepo resolves correctly) ---
