@@ -122,6 +122,8 @@ This Node script walks all files in the package's `dist/` directory and replaces
 
 The script is guarded: it only rewrites when the package's `name` starts with `@boltmcp/`. This means normal `pnpm pack` (e.g., in tests) is unaffected — only `publish-fork.sh` (which rewrites `name` first) triggers the dist rewrite.
 
+The script only rewrites `@modelcontextprotocol/server` — it does not rewrite `@modelcontextprotocol/node` or `@modelcontextprotocol/express`. The only references to those packages in dist output are JSDoc `@linkcode` tags in `.d.mts` type declarations (e.g., `{@linkcode @modelcontextprotocol/node!streamableHttp.NodeStreamableHTTPServerTransport}`). These are cosmetic documentation cross-references that TypeScript does not resolve at compile time, so they are harmless to leave as-is.
+
 ## Fork-Specific Files
 
 These files are added or modified by this fork. Fewer fork-specific files = easier rebases.
