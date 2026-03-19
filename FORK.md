@@ -114,7 +114,7 @@ The `prepack` script in each published package is permanently changed to include
 "prepack": "pnpm run build && node ../../../scripts/rewrite-fork-imports.cjs"
 ```
 
-This is safe because `prepack` only runs during `npm pack`/`npm publish`, never during normal development (`pnpm install`, `pnpm build`, etc.). The low rebase-conflict risk is acceptable since upstream rarely touches this field.
+This is safe because `prepack` only runs during `pnpm pack`/`pnpm publish`, never during normal development (`pnpm install`, `pnpm build`, etc.). The low rebase-conflict risk is acceptable since upstream rarely touches this field.
 
 ### `scripts/rewrite-fork-imports.cjs`
 
