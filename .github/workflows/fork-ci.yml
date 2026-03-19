@@ -147,7 +147,7 @@ jobs:
             - name: Verify no stale @modelcontextprotocol/server refs in dist
               run: |
                   for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
-                    if grep -r --include='*.mjs' '@modelcontextprotocol/server' "$pkg_dir/dist/"; then
+                    if grep -r '@modelcontextprotocol/server' "$pkg_dir/dist/"; then
                       echo "ERROR: found @modelcontextprotocol/server references in $pkg_dir/dist/"
                       exit 1
                     fi
