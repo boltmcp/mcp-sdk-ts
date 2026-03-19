@@ -12,7 +12,7 @@ const NEW = '@boltmcp/mcp-sdk-server';
 // Guard: only rewrite if package.json name is the fork name.
 // publish-fork.sh rewrites the name before npm pack/publish triggers prepack.
 const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-if (pkg.name !== NEW) {
+if (!pkg.name.startsWith('@boltmcp/')) {
   console.log('  rewrite-fork-imports: skipping (package name is not fork name)');
   process.exit(0);
 }

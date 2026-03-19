@@ -124,29 +124,35 @@ jobs:
 
             - name: Verify package.json restored
               run: |
-                  NAME=$(node -p "require('./packages/server/package.json').name")
-                  if [[ "$NAME" != "@modelcontextprotocol/server" ]]; then
-                    echo "ERROR: package.json name was not restored (got '$NAME')"
-                    exit 1
-                  fi
-                  echo "OK: package.json name is '$NAME'"
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    NAME=$(node -p "require('./$pkg_dir/package.json').name")
+                    if [[ "$NAME" == *"@boltmcp"* ]]; then
+                      echo "ERROR: $pkg_dir/package.json name was not restored (got '$NAME')"
+                      exit 1
+                    fi
+                    echo "OK: $pkg_dir name is '$NAME'"
+                  done
 
             - name: Verify prepack includes rewrite script
               run: |
-                  PREPACK=$(node -p "require('./packages/server/package.json').scripts.prepack")
-                  if [[ "$PREPACK" != *"rewrite-fork-imports.cjs"* ]]; then
-                    echo "ERROR: prepack does not include rewrite-fork-imports.cjs (got '$PREPACK')"
-                    exit 1
-                  fi
-                  echo "OK: prepack is '$PREPACK'"
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    PREPACK=$(node -p "require('./$pkg_dir/package.json').scripts.prepack")
+                    if [[ "$PREPACK" != *"rewrite-fork-imports.cjs"* ]]; then
+                      echo "ERROR: $pkg_dir prepack does not include rewrite-fork-imports.cjs (got '$PREPACK')"
+                      exit 1
+                    fi
+                    echo "OK: $pkg_dir prepack is '$PREPACK'"
+                  done
 
             - name: Verify no stale @modelcontextprotocol/server refs in dist
               run: |
-                  if grep -r '@modelcontextprotocol/server' packages/server/dist/; then
-                    echo "ERROR: found @modelcontextprotocol/server references in dist/"
-                    exit 1
-                  fi
-                  echo "OK: no stale references in dist/"
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    if grep -r '@modelcontextprotocol/server' "$pkg_dir/dist/"; then
+                      echo "ERROR: found @modelcontextprotocol/server references in $pkg_dir/dist/"
+                      exit 1
+                    fi
+                    echo "OK: no stale references in $pkg_dir/dist/"
+                  done
 
     publish:
         runs-on: ubuntu-latest

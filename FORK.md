@@ -1,18 +1,30 @@
-# Fork: @boltmcp/mcp-sdk-server
+# Fork: @boltmcp/mcp-sdk-*
 
-This is a fork of the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) (`modelcontextprotocol/typescript-sdk`). It publishes the `server` package to npm as `@boltmcp/mcp-sdk-server` with custom modifications.
+This is a fork of the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) (`modelcontextprotocol/typescript-sdk`). The server package deviates from upstream by adding support for JSON Schema tools (tools defined with raw JSON Schema instead of Zod). It publishes three packages to npm:
+
+| Upstream package | Fork package | Why |
+|---|---|---|
+| `@modelcontextprotocol/server` | `@boltmcp/mcp-sdk-server` | Custom modifications (JSON Schema tools) |
+| `@modelcontextprotocol/node` | `@boltmcp/mcp-sdk-node` | Peer-depends on `@modelcontextprotocol/server` |
+| `@modelcontextprotocol/express` | `@boltmcp/mcp-sdk-express` | Peer-depends on `@modelcontextprotocol/server` |
+
+The node and express middleware packages are published as fork packages because they declare `@modelcontextprotocol/server` as a peer dependency. Without republishing them under the `@boltmcp` scope (with the peer dep rewritten to `@boltmcp/mcp-sdk-server`), consumers would get unresolvable peer dependency warnings or conflicts.
 
 ## Consumer Usage
 
 ```sh
 npm install @boltmcp/mcp-sdk-server
+npm install @boltmcp/mcp-sdk-node      # Node.js middleware adapter
+npm install @boltmcp/mcp-sdk-express   # Express middleware adapter
 ```
 
 ```ts
 import { McpServer } from '@boltmcp/mcp-sdk-server';
+import { createMcpHandler } from '@boltmcp/mcp-sdk-node';
+import { createExpressAdapter } from '@boltmcp/mcp-sdk-express';
 ```
 
-The API is identical to `@modelcontextprotocol/server` — it's a drop-in replacement. See the upstream docs for full API reference.
+The APIs are identical to their upstream counterparts — they are drop-in replacements. See the upstream docs for full API reference.
 
 ## Branch Strategy
 
@@ -83,26 +95,34 @@ After syncing, run `pnpm check:all && pnpm test:all` to verify, then push `custo
 
 ## How the Rename Works
 
-**TL;DR:** Source code always uses `@modelcontextprotocol/server`. At publish time, `publish-fork.sh` temporarily renames the package and `prepack` rewrites `dist/` imports. Everything is restored after publish.
+**TL;DR:** Source code always uses `@modelcontextprotocol/*` names. At publish time, `publish-fork.sh` temporarily renames each package and `prepack` rewrites `dist/` imports. Everything is restored after publish.
 
 ### Temporary: `name` field rewrite
 
-`scripts/publish-fork.sh` temporarily rewrites `packages/server/package.json` `name` to `@boltmcp/mcp-sdk-server` before calling `npm pack`/`npm publish`, then restores the original via `trap`. This must be temporary because other workspace packages (middleware, examples) reference `@modelcontextprotocol/server` via `workspace:^` — changing the name permanently would break monorepo resolution.
+`scripts/publish-fork.sh` loops over all three packages, temporarily rewriting each `package.json` `name` to its `@boltmcp/*` counterpart before calling `pnpm publish`, then restoring the original. For middleware packages, it also rewrites `@modelcontextprotocol/server` in `peerDependencies` to `@boltmcp/mcp-sdk-server` and resolves `workspace:^` to a concrete `^<version>` range. We use `pnpm` (not `npm`) so that `catalog:` and `workspace:` protocol references are resolved to real versions at publish time. The rewrite must be temporary because workspace packages reference each other via `workspace:^` — changing names permanently would break monorepo resolution.
 
-### Permanent: `prepack` script
+Publish order: server → node → express. Each package is restored immediately after publish so that subsequent packages can still resolve workspace imports during their `prepack` build step.
 
-The `prepack` script in `packages/server/package.json` is permanently changed to:
+### Permanent: `prepack` scripts
+
+The `prepack` script in each published package is permanently changed to include the import rewriter:
 ```
+# packages/server/package.json
 "prepack": "pnpm run build && node ../../scripts/rewrite-fork-imports.cjs"
+
+# packages/middleware/node/package.json & packages/middleware/express/package.json
+"prepack": "pnpm run build && node ../../../scripts/rewrite-fork-imports.cjs"
 ```
 
-This is safe because `prepack` only runs during `npm pack`/`npm publish`, never during normal development (`pnpm install`, `pnpm build`, etc.). The low rebase-conflict risk is acceptable since upstream rarely touches this field.
+This is safe because `prepack` only runs during `pnpm pack`/`pnpm publish`, never during normal development (`pnpm install`, `pnpm build`, etc.). The low rebase-conflict risk is acceptable since upstream rarely touches this field.
 
 ### `scripts/rewrite-fork-imports.cjs`
 
-This Node script walks all files in `packages/server/dist/` and replaces every occurrence of `@modelcontextprotocol/server` with `@boltmcp/mcp-sdk-server`. This is deliberately broad — it catches any self-referencing externals (currently `_shims` imports), and will automatically handle any new subpath exports upstream may add in the future.
+This Node script walks all files in the package's `dist/` directory and replaces every occurrence of `@modelcontextprotocol/server` with `@boltmcp/mcp-sdk-server`. This is the only `@modelcontextprotocol/*` external import that appears in any of the three packages' dist output (core is bundled by tsdown).
 
-The script is guarded: it only rewrites when `package.json` `name` is already `@boltmcp/mcp-sdk-server`. This means normal `pnpm pack` (e.g., in tests) is unaffected — only `publish-fork.sh` (which rewrites `name` first) triggers the dist rewrite.
+The script is guarded: it only rewrites when the package's `name` starts with `@boltmcp/`. This means normal `pnpm pack` (e.g., in tests) is unaffected — only `publish-fork.sh` (which rewrites `name` first) triggers the dist rewrite.
+
+The script only rewrites `@modelcontextprotocol/server` — it does not rewrite `@modelcontextprotocol/node` or `@modelcontextprotocol/express`. The only references to those packages in dist output are JSDoc `@linkcode` tags in `.d.mts` type declarations (e.g., `{@linkcode @modelcontextprotocol/node!streamableHttp.NodeStreamableHTTPServerTransport}`). These are cosmetic documentation cross-references that TypeScript does not resolve at compile time, so they are harmless to leave as-is.
 
 ## Fork-Specific Files
 
@@ -118,6 +138,8 @@ These files are added or modified by this fork. Fewer fork-specific files = easi
 | `.github/workflows/claude-code-review.yml` | Added | None (fork-only) |
 | `.github/workflows/publish.yml` | Modified | Low (added repo guard) |
 | `packages/server/package.json` | Modified | Low (only `prepack` field changed) |
+| `packages/middleware/node/package.json` | Modified | Low (only `prepack` field changed) |
+| `packages/middleware/express/package.json` | Modified | Low (only `prepack` field changed) |
 
 ## Workflows
 
