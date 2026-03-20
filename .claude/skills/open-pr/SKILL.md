@@ -1,6 +1,7 @@
 ---
 name: open-pr
 description: 'Commit changes to a new branch off custom and open a PR against origin/custom'
+disable-model-invocation: true
 ---
 
 1. If there are no uncommitted changes, tell the user and stop.
