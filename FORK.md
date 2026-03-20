@@ -29,7 +29,7 @@ The APIs are identical to their upstream counterparts — they are drop-in repla
 ## Branch Strategy
 
 - **`main`** — Mirror of upstream. Never commit directly; updated via `sync-upstream.sh`.
-- **`custom`** — Default branch. Fork-specific files and any custom patches live here.
+- **`custom`** — Default branch (protected). Fork-specific files and any custom patches live here. Direct pushes are blocked; all changes must go through a PR from a feature branch.
 
 ## PR Workflow
 
