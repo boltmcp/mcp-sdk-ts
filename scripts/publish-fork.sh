@@ -96,9 +96,6 @@ PUBLISH_ARGS=(--access public --no-git-checks)
 if [[ -n "${CI:-}" ]]; then
   PUBLISH_ARGS+=(--provenance)
 fi
-if [[ -n "$NPM_TAG" ]]; then
-  PUBLISH_ARGS+=(--tag "$NPM_TAG")
-fi
 if $DRY_RUN; then
   PUBLISH_ARGS+=(--dry-run)
 fi
@@ -109,6 +106,20 @@ SERVER_VERSION="$(node -p "require('$REPO_ROOT/packages/server/package.json').ve
 if [[ -n "$VERSION" ]]; then
   SERVER_VERSION="$VERSION"
 fi
+
+# Auto-detect npm dist-tag from version if not explicitly set
+if [[ -z "$NPM_TAG" ]]; then
+  DETECT_VERSION="${VERSION:-$SERVER_VERSION}"
+  if [[ "$DETECT_VERSION" == *"-beta"* ]]; then
+    NPM_TAG="beta"
+  elif [[ "$DETECT_VERSION" == *"-"* ]]; then
+    NPM_TAG="next"
+  else
+    NPM_TAG="latest"
+  fi
+  echo "Auto-detected npm dist-tag: $NPM_TAG (from version $DETECT_VERSION)"
+fi
+PUBLISH_ARGS+=(--tag "$NPM_TAG")
 
 # --- Publish each package ---
 
