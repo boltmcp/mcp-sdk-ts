@@ -99,7 +99,7 @@ After syncing, run `pnpm check:all && pnpm test:all` to verify, then push `custo
 
 ### Temporary: `name` field rewrite
 
-`scripts/publish-fork.sh` loops over all three packages, temporarily rewriting each `package.json` `name` to its `@boltmcp/*` counterpart before calling `pnpm publish`, then restoring the original. For middleware packages, it also rewrites `@modelcontextprotocol/server` in `peerDependencies` to `@boltmcp/mcp-sdk-server` and resolves `workspace:^` to a concrete `^<version>` range. We use `pnpm` (not `npm`) so that `catalog:` and `workspace:` protocol references are resolved to real versions at publish time. The rewrite must be temporary because workspace packages reference each other via `workspace:^` — changing names permanently would break monorepo resolution.
+`scripts/publish-fork.sh` loops over all three packages, temporarily rewriting each `package.json` `name` to its `@boltmcp/*` counterpart and `repository.url` to the fork repo (required for npm provenance verification) before calling `pnpm publish`, then restoring the original. For middleware packages, it also rewrites `@modelcontextprotocol/server` in `peerDependencies` to `@boltmcp/mcp-sdk-server` and resolves `workspace:^` to a concrete `^<version>` range. We use `pnpm` (not `npm`) so that `catalog:` and `workspace:` protocol references are resolved to real versions at publish time. The rewrite must be temporary because workspace packages reference each other via `workspace:^` — changing names permanently would break monorepo resolution.
 
 Publish order: server → node → express. Each package is restored immediately after publish so that subsequent packages can still resolve workspace imports during their `prepack` build step.
 
