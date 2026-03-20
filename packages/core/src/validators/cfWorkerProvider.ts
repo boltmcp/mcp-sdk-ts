@@ -65,8 +65,8 @@ export class CfWorkerJsonSchemaValidator implements jsonSchemaValidator {
     getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
         if (!_Validator) {
             throw new Error(
-                '@cfworker/json-schema is not installed. Install it to use CfWorkerJsonSchemaValidator, '
-                + 'or use AjvJsonSchemaValidator for Node.js environments.'
+                '@cfworker/json-schema is not installed. Install it to use CfWorkerJsonSchemaValidator, ' +
+                    'or use AjvJsonSchemaValidator for Node.js environments.'
             );
         }
         // Cast to the cfworker Schema type - our JsonSchemaType is structurally compatible
