@@ -29,7 +29,7 @@ The APIs are identical to their upstream counterparts — they are drop-in repla
 ## Branch Strategy
 
 - **`main`** — Mirror of upstream. Never commit directly; updated via `sync-upstream.sh`.
-- **`custom`** — Default branch. Fork-specific files and any custom patches live here.
+- **`custom`** — Default branch (protected). Fork-specific files and any custom patches live here. Direct pushes are blocked; all changes must go through a PR from a feature branch.
 
 ## PR Workflow
 
@@ -99,7 +99,7 @@ After syncing, run `pnpm check:all && pnpm test:all` to verify, then push `custo
 
 ### Temporary: `name` field rewrite
 
-`scripts/publish-fork.sh` loops over all three packages, temporarily rewriting each `package.json` `name` to its `@boltmcp/*` counterpart before calling `pnpm publish`, then restoring the original. For middleware packages, it also rewrites `@modelcontextprotocol/server` in `peerDependencies` to `@boltmcp/mcp-sdk-server` and resolves `workspace:^` to a concrete `^<version>` range. We use `pnpm` (not `npm`) so that `catalog:` and `workspace:` protocol references are resolved to real versions at publish time. The rewrite must be temporary because workspace packages reference each other via `workspace:^` — changing names permanently would break monorepo resolution.
+`scripts/publish-fork.sh` loops over all three packages, temporarily rewriting each `package.json` `name` to its `@boltmcp/*` counterpart and `repository.url` to the fork repo (required for npm provenance verification) before calling `pnpm publish`, then restoring the original. For middleware packages, it also rewrites `@modelcontextprotocol/server` in `peerDependencies` to `@boltmcp/mcp-sdk-server` and resolves `workspace:^` to a concrete `^<version>` range. We use `pnpm` (not `npm`) so that `catalog:` and `workspace:` protocol references are resolved to real versions at publish time. The rewrite must be temporary because workspace packages reference each other via `workspace:^` — changing names permanently would break monorepo resolution.
 
 Publish order: server → node → express. Each package is restored immediately after publish so that subsequent packages can still resolve workspace imports during their `prepack` build step.
 

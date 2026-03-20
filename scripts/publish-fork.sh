@@ -146,6 +146,9 @@ const [, , pkgPath, forkName, version, serverVersion] = process.argv;
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 pkg.name = forkName;
 if (version) pkg.version = version;
+if (pkg.repository && pkg.repository.url) {
+  pkg.repository.url = 'git+https://github.com/boltmcp/mcp-sdk-ts.git';
+}
 
 // For middleware packages: rewrite @modelcontextprotocol/server peer dep
 if (pkg.peerDependencies && pkg.peerDependencies['@modelcontextprotocol/server']) {
