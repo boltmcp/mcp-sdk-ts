@@ -137,6 +137,7 @@ These files are added or modified by this fork. Fewer fork-specific files = easi
 | `.github/workflows/fork-ci.yml` | Added | None (fork-only) |
 | `.github/workflows/claude-code-review.yml` | Added | None (fork-only) |
 | `.github/workflows/publish.yml` | Modified | Low (added repo guard) |
+| `packages/core/src/validators/cfWorkerProvider.ts` | Modified | Medium (static → dynamic `import()` so `@cfworker/json-schema` doesn't crash Node.js consumers who only use AJV) |
 | `packages/server/package.json` | Modified | Low (only `prepack` field changed) |
 | `packages/middleware/node/package.json` | Modified | Low (only `prepack` field changed) |
 | `packages/middleware/express/package.json` | Modified | Low (only `prepack` field changed) |

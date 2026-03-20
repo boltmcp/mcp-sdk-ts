@@ -8,9 +8,15 @@
  * @see {@linkcode AjvJsonSchemaValidator} for the Node.js alternative
  */
 
-import { Validator } from '@cfworker/json-schema';
-
 import type { JsonSchemaType, JsonSchemaValidator, jsonSchemaValidator, JsonSchemaValidatorResult } from './types.js';
+
+let _Validator: typeof import('@cfworker/json-schema').Validator | undefined;
+try {
+    ({ Validator: _Validator } = await import('@cfworker/json-schema'));
+} catch {
+    // Optional dependency not installed — expected in Node.js environments
+    // where AjvJsonSchemaValidator is used instead.
+}
 
 /**
  * JSON Schema draft version supported by @cfworker/json-schema
@@ -57,8 +63,15 @@ export class CfWorkerJsonSchemaValidator implements jsonSchemaValidator {
      * @returns A validator function that validates input data
      */
     getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
+        if (!_Validator) {
+            throw new Error(
+                '@cfworker/json-schema is not installed. Install it to use CfWorkerJsonSchemaValidator, '
+                + 'or use AjvJsonSchemaValidator for Node.js environments.'
+            );
+        }
         // Cast to the cfworker Schema type - our JsonSchemaType is structurally compatible
-        const validator = new Validator(schema as ConstructorParameters<typeof Validator>[0], this.draft, this.shortcircuit);
+        const ValidatorCtor = _Validator;
+        const validator = new ValidatorCtor(schema as ConstructorParameters<typeof ValidatorCtor>[0], this.draft, this.shortcircuit);
 
         return (input: unknown): JsonSchemaValidatorResult<T> => {
             const result = validator.validate(input);
