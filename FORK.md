@@ -162,9 +162,12 @@ These files are added or modified by this fork. Fewer fork-specific files = easi
 
 Set the default branch to `custom` (Settings → General → Default branch). This ensures PRs target `custom` by default and that workflow OIDC validation works for Claude Code Review.
 
+### npm trusted publishing (OIDC)
+
+Publishing uses npm's trusted publisher feature — each `@boltmcp` package is linked to the GitHub repo on npmjs.com. The `publish` job's `id-token: write` permission lets GitHub Actions mint an OIDC token that npm accepts in place of a static access token. No `NPM_TOKEN` secret is needed.
+
 ### Required secrets
 
-- **`NPM_TOKEN`** — npm publish token with write access to `@boltmcp` scope
 - **`ANTHROPIC_API_KEY`** — for Claude Code Review on PRs
 
 ### Release environment (recommended)
