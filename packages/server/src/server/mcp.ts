@@ -861,8 +861,8 @@ export class McpServer {
                     needsExecutorRegen = true;
                 }
                 if (updates.callback !== undefined) {
-                    registeredTool.handler = updates.callback;
-                    currentHandler = updates.callback as AnyToolHandler<AnySchema | undefined>;
+                    registeredTool.handler = updates.callback as AnyToolHandler<AnySchema | undefined>;
+                    currentHandler = registeredTool.handler;
                     needsExecutorRegen = true;
                 }
                 if (needsExecutorRegen) {
@@ -924,7 +924,7 @@ export class McpServer {
             _meta?: Record<string, unknown>;
         },
         cb: ToolCallback<InputArgs>
-    ): RegisteredTool;
+    ): RegisteredTool<ToolCallback<InputArgs>>;
 
     // Overload 2: JSON Schema (args typed as Record<string, unknown>)
     registerTool(
@@ -938,7 +938,7 @@ export class McpServer {
             _meta?: Record<string, unknown>;
         },
         cb: JsonSchemaToolCallback
-    ): RegisteredTool;
+    ): RegisteredTool<JsonSchemaToolCallback>;
 
     registerTool(
         name: string,
@@ -1157,7 +1157,9 @@ export type AnyToolHandler<Args extends AnySchema | undefined = undefined> = Too
  */
 type ToolExecutor = (args: unknown, ctx: ServerContext) => Promise<CallToolResult | CreateTaskResult>;
 
-export type RegisteredTool = {
+export type RegisteredTool<
+    Cb extends ToolCallback<AnySchema | undefined> | JsonSchemaToolCallback = ToolCallback<AnySchema> | JsonSchemaToolCallback
+> = {
     title?: string;
     description?: string;
     inputSchema?: ToolSchemaUnion;
@@ -1179,7 +1181,7 @@ export type RegisteredTool = {
         outputSchema?: AnySchema | JsonSchemaType;
         annotations?: ToolAnnotations;
         _meta?: Record<string, unknown>;
-        callback?: ToolCallback<AnySchema>;
+        callback?: Cb;
         enabled?: boolean;
     }): void;
     remove(): void;
