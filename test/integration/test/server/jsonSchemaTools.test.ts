@@ -266,7 +266,7 @@ describe('JSON Schema tools', () => {
 
             tool.update({
                 paramsSchema: jsonSchema,
-                callback: async args => ({
+                callback: async (args: Record<string, unknown>) => ({
                     content: [{ type: 'text', text: String(args.b) }]
                 })
             });
