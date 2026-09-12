@@ -10,6 +10,7 @@ import type {
     CreateTaskServerContext,
     GetPromptResult,
     Implementation,
+    JsonSchemaType,
     ListPromptsResult,
     ListResourcesResult,
     ListToolsResult,
@@ -30,6 +31,7 @@ import type {
     Variables
 } from '@modelcontextprotocol/core';
 import {
+    AjvJsonSchemaValidator,
     assertCompleteRequestPrompt,
     assertCompleteRequestResourceTemplate,
     getSchemaDescription,
@@ -49,6 +51,19 @@ import { ExperimentalMcpServerTasks } from '../experimental/tasks/mcpServer.js';
 import { getCompleter, isCompletable } from './completable.js';
 import type { ServerOptions } from './server.js';
 import { Server } from './server.js';
+
+/** Discriminated union stored internally to branch validation/listing logic. */
+export type ToolSchemaUnion = { kind: 'zod'; schema: AnySchema } | { kind: 'json'; schema: JsonSchemaType };
+
+function toToolSchemaUnion(schema: AnySchema | JsonSchemaType): ToolSchemaUnion {
+    if ('_zod' in (schema as Record<string, unknown>)) {
+        return { kind: 'zod', schema: schema as AnySchema };
+    }
+    return { kind: 'json', schema: schema as JsonSchemaType };
+}
+
+/** Callback type when inputSchema is raw JSON Schema (args is untyped). */
+export type JsonSchemaToolCallback = (args: Record<string, unknown>, ctx: ServerContext) => CallToolResult | Promise<CallToolResult>;
 
 /**
  * High-level MCP server that provides a simpler API for working with resources, tools, and prompts.
@@ -142,22 +157,30 @@ export class McpServer {
                 tools: Object.entries(this._registeredTools)
                     .filter(([, tool]) => tool.enabled)
                     .map(([name, tool]): Tool => {
+                        let inputSchema: Tool['inputSchema'];
+                        if (!tool.inputSchema) {
+                            inputSchema = EMPTY_OBJECT_JSON_SCHEMA;
+                        } else if (tool.inputSchema.kind === 'zod') {
+                            inputSchema = schemaToJson(tool.inputSchema.schema, { io: 'input' }) as Tool['inputSchema'];
+                        } else {
+                            inputSchema = tool.inputSchema.schema as Tool['inputSchema'];
+                        }
+
                         const toolDefinition: Tool = {
                             name,
                             title: tool.title,
                             description: tool.description,
-                            inputSchema: tool.inputSchema
-                                ? (schemaToJson(tool.inputSchema, { io: 'input' }) as Tool['inputSchema'])
-                                : EMPTY_OBJECT_JSON_SCHEMA,
+                            inputSchema,
                             annotations: tool.annotations,
                             execution: tool.execution,
                             _meta: tool._meta
                         };
 
                         if (tool.outputSchema) {
-                            toolDefinition.outputSchema = schemaToJson(tool.outputSchema, {
-                                io: 'output'
-                            }) as Tool['outputSchema'];
+                            toolDefinition.outputSchema =
+                                tool.outputSchema.kind === 'zod'
+                                    ? (schemaToJson(tool.outputSchema.schema, { io: 'output' }) as Tool['outputSchema'])
+                                    : (tool.outputSchema.schema as Tool['outputSchema']);
                         }
 
                         return toolDefinition;
@@ -244,28 +267,32 @@ export class McpServer {
     /**
      * Validates tool input arguments against the tool's input schema.
      */
-    private async validateToolInput<
-        Tool extends RegisteredTool,
-        Args extends Tool['inputSchema'] extends infer InputSchema
-            ? InputSchema extends AnySchema
-                ? SchemaOutput<InputSchema>
-                : undefined
-            : undefined
-    >(tool: Tool, args: Args, toolName: string): Promise<Args> {
+    private async validateToolInput(tool: RegisteredTool, args: unknown, toolName: string): Promise<unknown> {
         if (!tool.inputSchema) {
-            return undefined as Args;
+            return undefined;
         }
 
-        const parseResult = await parseSchemaAsync(tool.inputSchema, args ?? {});
-        if (!parseResult.success) {
-            const errorMessage = parseResult.error.issues.map((i: { message: string }) => i.message).join(', ');
+        if (tool.inputSchema.kind === 'zod') {
+            const parseResult = await parseSchemaAsync(tool.inputSchema.schema, args ?? {});
+            if (!parseResult.success) {
+                const errorMessage = parseResult.error.issues.map((i: { message: string }) => i.message).join(', ');
+                throw new ProtocolError(
+                    ProtocolErrorCode.InvalidParams,
+                    `Input validation error: Invalid arguments for tool ${toolName}: ${errorMessage}`
+                );
+            }
+            return parseResult.data;
+        }
+
+        // JSON Schema validation path
+        const result = this.ajvValidator.getValidator(tool.inputSchema.schema)(args ?? {});
+        if (!result.valid) {
             throw new ProtocolError(
                 ProtocolErrorCode.InvalidParams,
-                `Input validation error: Invalid arguments for tool ${toolName}: ${errorMessage}`
+                `Input validation error: Invalid arguments for tool ${toolName}: ${result.errorMessage}`
             );
         }
-
-        return parseResult.data as unknown as Args;
+        return result.data;
     }
 
     /**
@@ -292,13 +319,24 @@ export class McpServer {
             );
         }
 
-        // if the tool has an output schema, validate structured content
-        const parseResult = await parseSchemaAsync(tool.outputSchema, result.structuredContent);
-        if (!parseResult.success) {
-            const errorMessage = parseResult.error.issues.map((i: { message: string }) => i.message).join(', ');
+        if (tool.outputSchema.kind === 'zod') {
+            const parseResult = await parseSchemaAsync(tool.outputSchema.schema, result.structuredContent);
+            if (!parseResult.success) {
+                const errorMessage = parseResult.error.issues.map((i: { message: string }) => i.message).join(', ');
+                throw new ProtocolError(
+                    ProtocolErrorCode.InvalidParams,
+                    `Output validation error: Invalid structured content for tool ${toolName}: ${errorMessage}`
+                );
+            }
+            return;
+        }
+
+        // JSON Schema validation path
+        const validationResult = this.ajvValidator.getValidator(tool.outputSchema.schema)(result.structuredContent);
+        if (!validationResult.valid) {
             throw new ProtocolError(
                 ProtocolErrorCode.InvalidParams,
-                `Output validation error: Invalid structured content for tool ${toolName}: ${errorMessage}`
+                `Output validation error: Invalid structured content for tool ${toolName}: ${validationResult.errorMessage}`
             );
         }
     }
@@ -768,12 +806,18 @@ export class McpServer {
         return registeredPrompt;
     }
 
+    private _ajvValidator?: AjvJsonSchemaValidator;
+    private get ajvValidator(): AjvJsonSchemaValidator {
+        this._ajvValidator ??= new AjvJsonSchemaValidator();
+        return this._ajvValidator;
+    }
+
     private _createRegisteredTool(
         name: string,
         title: string | undefined,
         description: string | undefined,
-        inputSchema: AnySchema | undefined,
-        outputSchema: AnySchema | undefined,
+        inputSchema: ToolSchemaUnion | undefined,
+        outputSchema: ToolSchemaUnion | undefined,
         annotations: ToolAnnotations | undefined,
         execution: ToolExecution | undefined,
         _meta: Record<string, unknown> | undefined,
@@ -813,19 +857,21 @@ export class McpServer {
                 // Track if we need to regenerate the executor
                 let needsExecutorRegen = false;
                 if (updates.paramsSchema !== undefined) {
-                    registeredTool.inputSchema = updates.paramsSchema;
+                    registeredTool.inputSchema = updates.paramsSchema ? toToolSchemaUnion(updates.paramsSchema) : undefined;
                     needsExecutorRegen = true;
                 }
                 if (updates.callback !== undefined) {
-                    registeredTool.handler = updates.callback;
-                    currentHandler = updates.callback as AnyToolHandler<AnySchema | undefined>;
+                    registeredTool.handler = updates.callback as AnyToolHandler<AnySchema | undefined>;
+                    currentHandler = registeredTool.handler;
                     needsExecutorRegen = true;
                 }
                 if (needsExecutorRegen) {
                     registeredTool.executor = createToolExecutor(registeredTool.inputSchema, currentHandler);
                 }
 
-                if (updates.outputSchema !== undefined) registeredTool.outputSchema = updates.outputSchema;
+                if (updates.outputSchema !== undefined) {
+                    registeredTool.outputSchema = updates.outputSchema ? toToolSchemaUnion(updates.outputSchema) : undefined;
+                }
                 if (updates.annotations !== undefined) registeredTool.annotations = updates.annotations;
                 if (updates._meta !== undefined) registeredTool._meta = updates._meta;
                 if (updates.enabled !== undefined) registeredTool.enabled = updates.enabled;
@@ -866,6 +912,7 @@ export class McpServer {
      * );
      * ```
      */
+    // Overload 1: Zod schemas (full type inference)
     registerTool<OutputArgs extends AnySchema, InputArgs extends AnySchema | undefined = undefined>(
         name: string,
         config: {
@@ -877,6 +924,33 @@ export class McpServer {
             _meta?: Record<string, unknown>;
         },
         cb: ToolCallback<InputArgs>
+    ): RegisteredTool<ToolCallback<InputArgs>>;
+
+    // Overload 2: JSON Schema (args typed as Record<string, unknown>)
+    registerTool(
+        name: string,
+        config: {
+            title?: string;
+            description?: string;
+            inputSchema?: JsonSchemaType;
+            outputSchema?: JsonSchemaType;
+            annotations?: ToolAnnotations;
+            _meta?: Record<string, unknown>;
+        },
+        cb: JsonSchemaToolCallback
+    ): RegisteredTool<JsonSchemaToolCallback>;
+
+    registerTool(
+        name: string,
+        config: {
+            title?: string;
+            description?: string;
+            inputSchema?: AnySchema | JsonSchemaType;
+            outputSchema?: AnySchema | JsonSchemaType;
+            annotations?: ToolAnnotations;
+            _meta?: Record<string, unknown>;
+        },
+        cb: ToolCallback<AnySchema | undefined> | JsonSchemaToolCallback
     ): RegisteredTool {
         if (this._registeredTools[name]) {
             throw new Error(`Tool ${name} is already registered`);
@@ -888,8 +962,8 @@ export class McpServer {
             name,
             title,
             description,
-            inputSchema,
-            outputSchema,
+            inputSchema ? toToolSchemaUnion(inputSchema) : undefined,
+            outputSchema ? toToolSchemaUnion(outputSchema) : undefined,
             annotations,
             { taskSupport: 'forbidden' },
             _meta,
@@ -1083,11 +1157,13 @@ export type AnyToolHandler<Args extends AnySchema | undefined = undefined> = Too
  */
 type ToolExecutor = (args: unknown, ctx: ServerContext) => Promise<CallToolResult | CreateTaskResult>;
 
-export type RegisteredTool = {
+export type RegisteredTool<
+    Cb extends ToolCallback<AnySchema | undefined> | JsonSchemaToolCallback = ToolCallback<AnySchema> | JsonSchemaToolCallback
+> = {
     title?: string;
     description?: string;
-    inputSchema?: AnySchema;
-    outputSchema?: AnySchema;
+    inputSchema?: ToolSchemaUnion;
+    outputSchema?: ToolSchemaUnion;
     annotations?: ToolAnnotations;
     execution?: ToolExecution;
     _meta?: Record<string, unknown>;
@@ -1101,11 +1177,11 @@ export type RegisteredTool = {
         name?: string | null;
         title?: string;
         description?: string;
-        paramsSchema?: AnySchema;
-        outputSchema?: AnySchema;
+        paramsSchema?: AnySchema | JsonSchemaType;
+        outputSchema?: AnySchema | JsonSchemaType;
         annotations?: ToolAnnotations;
         _meta?: Record<string, unknown>;
-        callback?: ToolCallback<AnySchema>;
+        callback?: Cb;
         enabled?: boolean;
     }): void;
     remove(): void;
@@ -1116,7 +1192,7 @@ export type RegisteredTool = {
  * When `inputSchema` is defined, the handler is called with `(args, ctx)`.
  * When `inputSchema` is undefined, the handler is called with just `(ctx)`.
  */
-function createToolExecutor(inputSchema: AnySchema | undefined, handler: AnyToolHandler<AnySchema | undefined>): ToolExecutor {
+function createToolExecutor(inputSchema: ToolSchemaUnion | undefined, handler: AnyToolHandler<AnySchema | undefined>): ToolExecutor {
     const isTaskHandler = 'createTask' in handler;
 
     if (isTaskHandler) {
