@@ -5,10 +5,17 @@
  * @experimental
  */
 
-import type { AnySchema, TaskToolExecution, ToolAnnotations, ToolExecution } from '@modelcontextprotocol/core';
+import type { AnySchema, JsonSchemaType, TaskToolExecution, ToolAnnotations, ToolExecution } from '@modelcontextprotocol/core';
 
-import type { AnyToolHandler, McpServer, RegisteredTool } from '../../server/mcp.js';
-import type { ToolTaskHandler } from './interfaces.js';
+import type { AnyToolHandler, McpServer, RegisteredTool, ToolSchemaUnion } from '../../server/mcp.js';
+
+function toToolSchemaUnion(schema: AnySchema | JsonSchemaType): ToolSchemaUnion {
+    if ('_zod' in (schema as Record<string, unknown>)) {
+        return { kind: 'zod', schema: schema as AnySchema };
+    }
+    return { kind: 'json', schema: schema as JsonSchemaType };
+}
+import type { JsonSchemaToolTaskHandler, ToolTaskHandler } from './interfaces.js';
 
 /**
  * Internal interface for accessing {@linkcode McpServer}'s private _createRegisteredTool method.
@@ -19,8 +26,8 @@ interface McpServerInternal {
         name: string,
         title: string | undefined,
         description: string | undefined,
-        inputSchema: AnySchema | undefined,
-        outputSchema: AnySchema | undefined,
+        inputSchema: ToolSchemaUnion | undefined,
+        outputSchema: ToolSchemaUnion | undefined,
         annotations: ToolAnnotations | undefined,
         execution: ToolExecution | undefined,
         _meta: Record<string, unknown> | undefined,
@@ -76,6 +83,7 @@ export class ExperimentalMcpServerTasks {
      *
      * @experimental
      */
+    // Overload 1: No inputSchema (Zod)
     registerToolTask<OutputArgs extends AnySchema | undefined>(
         name: string,
         config: {
@@ -89,6 +97,7 @@ export class ExperimentalMcpServerTasks {
         handler: ToolTaskHandler<undefined>
     ): RegisteredTool;
 
+    // Overload 2: Zod inputSchema
     registerToolTask<InputArgs extends AnySchema, OutputArgs extends AnySchema | undefined>(
         name: string,
         config: {
@@ -103,18 +112,33 @@ export class ExperimentalMcpServerTasks {
         handler: ToolTaskHandler<InputArgs>
     ): RegisteredTool;
 
-    registerToolTask<InputArgs extends AnySchema | undefined, OutputArgs extends AnySchema | undefined>(
+    // Overload 3: JSON Schema (args typed as Record<string, unknown>)
+    registerToolTask(
         name: string,
         config: {
             title?: string;
             description?: string;
-            inputSchema?: InputArgs;
-            outputSchema?: OutputArgs;
+            inputSchema?: JsonSchemaType;
+            outputSchema?: JsonSchemaType;
             annotations?: ToolAnnotations;
             execution?: TaskToolExecution;
             _meta?: Record<string, unknown>;
         },
-        handler: ToolTaskHandler<InputArgs>
+        handler: JsonSchemaToolTaskHandler
+    ): RegisteredTool;
+
+    registerToolTask(
+        name: string,
+        config: {
+            title?: string;
+            description?: string;
+            inputSchema?: AnySchema | JsonSchemaType;
+            outputSchema?: AnySchema | JsonSchemaType;
+            annotations?: ToolAnnotations;
+            execution?: TaskToolExecution;
+            _meta?: Record<string, unknown>;
+        },
+        handler: ToolTaskHandler<AnySchema | undefined> | JsonSchemaToolTaskHandler
     ): RegisteredTool {
         // Validate that taskSupport is not 'forbidden' for task-based tools
         const execution: ToolExecution = { taskSupport: 'required', ...config.execution };
@@ -128,8 +152,8 @@ export class ExperimentalMcpServerTasks {
             name,
             config.title,
             config.description,
-            config.inputSchema,
-            config.outputSchema,
+            config.inputSchema ? toToolSchemaUnion(config.inputSchema) : undefined,
+            config.outputSchema ? toToolSchemaUnion(config.outputSchema) : undefined,
             config.annotations,
             execution,
             config._meta,
