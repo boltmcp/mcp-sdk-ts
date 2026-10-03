@@ -65,3 +65,14 @@ export interface ToolTaskHandler<Args extends AnySchema | undefined = undefined>
      */
     getTaskResult: TaskRequestHandler<CallToolResult, Args>;
 }
+
+/**
+ * Task handler interface for JSON Schema-based tools.
+ * Args are typed as `Record<string, unknown>` since JSON Schema doesn't provide static type inference.
+ * @experimental
+ */
+export interface JsonSchemaToolTaskHandler {
+    createTask: (args: Record<string, unknown>, ctx: CreateTaskServerContext) => CreateTaskResult | Promise<CreateTaskResult>;
+    getTask: (args: Record<string, unknown>, ctx: TaskServerContext) => GetTaskResult | Promise<GetTaskResult>;
+    getTaskResult: (args: Record<string, unknown>, ctx: TaskServerContext) => CallToolResult | Promise<CallToolResult>;
+}
