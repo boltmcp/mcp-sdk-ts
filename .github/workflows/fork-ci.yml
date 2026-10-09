@@ -1,0 +1,193 @@
+name: Fork CI
+
+on:
+    push:
+        branches:
+            - custom
+        tags:
+            - 'fork-v*'
+    pull_request:
+        branches:
+            - custom
+    workflow_dispatch:
+        inputs:
+            publish:
+                description: 'Publish to npm'
+                required: false
+                type: boolean
+                default: false
+            version:
+                description: 'Version to publish (e.g., 2.0.0)'
+                required: false
+                type: string
+            tag:
+                description: 'npm dist-tag (e.g., beta, latest)'
+                required: false
+                type: string
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    resolve-inputs:
+        runs-on: ubuntu-latest
+        outputs:
+            is-publish: ${{ steps.resolve.outputs.is-publish }}
+            version: ${{ steps.resolve.outputs.version }}
+            tag: ${{ steps.resolve.outputs.tag }}
+        steps:
+            - name: Resolve publish inputs
+              id: resolve
+              run: |
+                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                    echo "is-publish=${{ github.event.inputs.publish }}" >> "$GITHUB_OUTPUT"
+                    echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+                    echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+                  elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+                    TAG_REF="${{ github.ref_name }}"
+                    VERSION="${TAG_REF#fork-v}"
+
+                    # Validate semver (basic: X.Y.Z with optional prerelease)
+                    if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+                      echo "ERROR: Invalid semver version '$VERSION' extracted from tag '$TAG_REF'"
+                      exit 1
+                    fi
+
+                    # Auto-detect npm dist-tag from prerelease
+                    if [[ "$VERSION" == *"-beta"* ]]; then
+                      NPM_TAG="beta"
+                    elif [[ "$VERSION" == *"-"* ]]; then
+                      NPM_TAG="next"
+                    else
+                      NPM_TAG="latest"
+                    fi
+
+                    echo "is-publish=true" >> "$GITHUB_OUTPUT"
+                    echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                    echo "tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
+                    echo "Resolved: version=$VERSION, tag=$NPM_TAG"
+                  else
+                    echo "is-publish=false" >> "$GITHUB_OUTPUT"
+                    echo "version=" >> "$GITHUB_OUTPUT"
+                    echo "tag=" >> "$GITHUB_OUTPUT"
+                  fi
+
+    build-and-test:
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                node-version: [20, 22, 24]
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  run_install: false
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: ${{ matrix.node-version }}
+                  cache: pnpm
+                  cache-dependency-path: pnpm-lock.yaml
+
+            - run: pnpm install
+            - run: pnpm check:all
+            - run: pnpm build:all
+            - run: pnpm test:all
+
+    validate-publish:
+        runs-on: ubuntu-latest
+        needs: [build-and-test, resolve-inputs]
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  run_install: false
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+                  cache-dependency-path: pnpm-lock.yaml
+
+            - run: pnpm install
+
+            - name: Dry-run publish
+              run: ./scripts/publish-fork.sh --dry-run --yes
+
+            - name: Verify package.json restored
+              run: |
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    NAME=$(node -p "require('./$pkg_dir/package.json').name")
+                    if [[ "$NAME" == *"@boltmcp"* ]]; then
+                      echo "ERROR: $pkg_dir/package.json name was not restored (got '$NAME')"
+                      exit 1
+                    fi
+                    echo "OK: $pkg_dir name is '$NAME'"
+                  done
+
+            - name: Verify prepack includes rewrite script
+              run: |
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    PREPACK=$(node -p "require('./$pkg_dir/package.json').scripts.prepack")
+                    if [[ "$PREPACK" != *"rewrite-fork-imports.cjs"* ]]; then
+                      echo "ERROR: $pkg_dir prepack does not include rewrite-fork-imports.cjs (got '$PREPACK')"
+                      exit 1
+                    fi
+                    echo "OK: $pkg_dir prepack is '$PREPACK'"
+                  done
+
+            - name: Verify no stale @modelcontextprotocol/server refs in dist
+              run: |
+                  for pkg_dir in packages/server packages/middleware/node packages/middleware/express; do
+                    if grep -r '@modelcontextprotocol/server' "$pkg_dir/dist/"; then
+                      echo "ERROR: found @modelcontextprotocol/server references in $pkg_dir/dist/"
+                      exit 1
+                    fi
+                    echo "OK: no stale references in $pkg_dir/dist/"
+                  done
+
+    publish:
+        runs-on: ubuntu-latest
+        if: needs.resolve-inputs.outputs.is-publish == 'true'
+        needs: [build-and-test, validate-publish, resolve-inputs]
+        environment: release
+
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  run_install: false
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+                  cache-dependency-path: pnpm-lock.yaml
+                  registry-url: 'https://registry.npmjs.org'
+
+            - run: pnpm install
+
+            - name: Publish
+              run: |
+                  ARGS="--yes"
+                  if [[ -n "${{ needs.resolve-inputs.outputs.version }}" ]]; then
+                    ARGS="$ARGS --version ${{ needs.resolve-inputs.outputs.version }}"
+                  fi
+                  if [[ -n "${{ needs.resolve-inputs.outputs.tag }}" ]]; then
+                    ARGS="$ARGS --tag ${{ needs.resolve-inputs.outputs.tag }}"
+                  fi
+                  ./scripts/publish-fork.sh $ARGS
