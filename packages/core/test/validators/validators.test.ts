@@ -588,14 +588,19 @@ describe('Missing dependencies', () => {
             vi.doUnmock('@cfworker/json-schema');
         });
 
-        it('should throw error when trying to import cfWorkerProvider without @cfworker/json-schema', async () => {
+        it('should import successfully but getValidator should throw when @cfworker/json-schema is missing', async () => {
             // Mock @cfworker/json-schema as not installed
             vi.doMock('@cfworker/json-schema', () => {
                 throw new Error("Cannot find module '@cfworker/json-schema'");
             });
 
-            // Attempting to import cfWorkerProvider should fail
-            await expect(import('../../src/validators/cfWorkerProvider.js')).rejects.toThrow();
+            // Import succeeds (dynamic import is caught internally)
+            const cfworkerModule = await import('../../src/validators/cfWorkerProvider.js');
+            expect(cfworkerModule.CfWorkerJsonSchemaValidator).toBeDefined();
+
+            // But getValidator throws because the dependency is missing
+            const validator = new cfworkerModule.CfWorkerJsonSchemaValidator();
+            expect(() => validator.getValidator({ type: 'string' })).toThrow('@cfworker/json-schema is not installed');
         });
 
         it('should be able to import ajv-provider when @cfworker/json-schema is missing', async () => {
