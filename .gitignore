@@ -52,3 +52,7 @@ dist/
 
 # Conformance test results
 results/
+
+.claude/worktrees
+
+ignore/

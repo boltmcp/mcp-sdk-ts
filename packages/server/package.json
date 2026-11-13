@@ -50,7 +50,7 @@
         "typecheck": "tsgo -p tsconfig.json --noEmit",
         "build": "tsdown",
         "build:watch": "tsdown --watch",
-        "prepack": "pnpm run build",
+        "prepack": "pnpm run build && node ../../scripts/rewrite-fork-imports.cjs",
         "lint": "eslint src/ && prettier --ignore-path ../../.prettierignore --check .",
         "lint:fix": "eslint src/ --fix && prettier --ignore-path ../../.prettierignore --write .",
         "check": "pnpm run typecheck && pnpm run lint",
